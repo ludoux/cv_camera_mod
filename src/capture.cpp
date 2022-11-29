@@ -11,13 +11,19 @@ namespace enc = sensor_msgs::image_encodings;
 
 Capture::Capture(ros::NodeHandle &node, const std::string &topic_name,
                  int32_t buffer_size, const std::string &frame_id,
-                 const std::string& camera_name)
+                 const std::string& camera_name,
+                 double rect, double raw_factor,
+                 int rotate, int compress_height)
     : node_(node),
       it_(node_),
       topic_name_(topic_name),
       buffer_size_(buffer_size),
       frame_id_(frame_id),
       info_manager_(node_, camera_name),
+      rect_(rect),
+      raw_factor_(raw_factor),
+      rotate_(rotate),
+      compress_height_(compress_height),
       capture_delay_(ros::Duration(node_.param("capture_delay", 0.0)))
 {
 }
@@ -86,6 +92,10 @@ void Capture::open(int32_t device_id)
     throw DeviceError(stream.str());
   }
   pub_ = it_.advertiseCamera(topic_name_, buffer_size_);
+  if (rect_ > 1.01)
+  {
+    rectpub_ = it_.advertiseCamera("image_rect", buffer_size_);
+  }
 
   loadCameraInfo();
 }
@@ -98,6 +108,10 @@ void Capture::open(const std::string &device_path)
     throw DeviceError("device_path " + device_path + " cannot be opened");
   }
   pub_ = it_.advertiseCamera(topic_name_, buffer_size_);
+  if (rect_ > 1.01)
+  {
+    rectpub_ = it_.advertiseCamera("image_rect", buffer_size_);
+  }
 
   loadCameraInfo();
 }
@@ -117,7 +131,10 @@ void Capture::openFile(const std::string &file_path)
     throw DeviceError(stream.str());
   }
   pub_ = it_.advertiseCamera(topic_name_, buffer_size_);
-
+  if (rect_ > 1.01)
+  {
+    rectpub_ = it_.advertiseCamera("image_rect", buffer_size_);
+  }
   std::string url;
   if (node_.getParam("camera_info_url", url))
   {
@@ -170,7 +187,83 @@ bool Capture::capture()
 
 void Capture::publish()
 {
+  /*
   pub_.publish(*getImageMsgPtr(), info_);
+  */
+  
+  // rotate -> [rect] OR [compress] ->finish
+  sensor_msgs::ImagePtr msg = boost::make_shared<sensor_msgs::Image>();
+  cv::Mat rotatedMat;
+  if (rotate_ != 0)
+  {
+    cv::rotate(bridge_.image, rotatedMat, 1);//180 degree rotate
+  }
+  else
+  {
+    rotatedMat = bridge_.image.clone();
+  }
+  
+  
+  if (rect_ > 1.01)
+  {
+    // In order to save bandwidth, when rect function is active,
+    // the original image topic will compress by the 'raw_factor'
+    int new_width = bridge_.image.cols / raw_factor_;
+    int new_height = bridge_.image.rows / raw_factor_;
+    cv::Size dsize = cv::Size(new_width, new_height);
+    cv::Mat resizedMat;
+    cv::resize(rotatedMat, resizedMat, dsize, 0, 0, CV_INTER_AREA);
+    msg = cv_bridge::CvImage(bridge_.header, bridge_.encoding, resizedMat).toImageMsg();
+    info_.width = new_width;
+    info_.height = new_height;
+    pub_.publish(*msg, info_);
+
+    info_.width = bridge_.image.cols;
+    info_.height = bridge_.image.rows;
+    publishRect();
+  }
+  else if (compress_height_ > 0)
+  {
+    if (compress_height_ >= bridge_.image.rows)
+    {
+      //No need to compress
+      ROS_WARN("compress_height need to be smaller than original height. Please Check.");
+      msg = cv_bridge::CvImage(bridge_.header, bridge_.encoding, rotatedMat).toImageMsg();
+      pub_.publish(*msg, info_);
+    }
+    else
+    {
+      int new_height = compress_height_;
+      int new_width = new_height * bridge_.image.cols / bridge_.image.rows;
+      cv::Size dsize = cv::Size(new_width, new_height);
+      cv::Mat compressedMat;
+      cv::resize(rotatedMat, compressedMat, dsize, 0, 0, CV_INTER_AREA);
+      msg = cv_bridge::CvImage(bridge_.header, bridge_.encoding, rotatedMat).toImageMsg();
+      info_.width = new_width;
+      info_.height = new_height;
+      pub_.publish(*msg, info_);
+    }
+  }
+  else
+  {
+    msg = cv_bridge::CvImage(bridge_.header, bridge_.encoding, compressedMat).toImageMsg();
+    pub_.publish(*msg, info_);
+  }
+}
+
+void Capture::publishRect()
+{
+  int new_width = bridge_.image.cols / rect_;
+  int new_height = bridge_.image.rows / rect_;
+  cv::Rect rect((bridge_.image.cols - new_width) / 2, (bridge_.image.rows - new_height) / 2, new_width, new_height);
+  cv::Mat rected = bridge_.image(rect);
+  sensor_msgs::ImagePtr msg = cv_bridge::CvImage(bridge_.header, bridge_.encoding, rected).toImageMsg();
+  info_.width = new_width;
+  info_.height = new_height;
+  
+  rectpub_.publish(*msg, info_);
+  info_.width = bridge_.image.cols;
+  info_.height = bridge_.image.rows;
 }
 
 bool Capture::setPropertyFromParam(int property_id, const std::string &param_name)

@@ -13,6 +13,8 @@
 #include <sensor_msgs/image_encodings.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <camera_info_manager/camera_info_manager.h>
+#include <opencv2/opencv.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 
 /**
  * @brief namespace of this package
@@ -40,7 +42,11 @@ public:
           const std::string &topic_name,
           int32_t buffer_size,
           const std::string &frame_id,
-          const std::string &camera_name);
+          const std::string &camera_name,
+          double rect,
+          double raw_factor,
+          int rotate,
+          int compress_height);
 
   /**
    * @brief Open capture device with device ID.
@@ -93,6 +99,12 @@ public:
    *
    */
   void publish();
+
+  /**
+   * @brief Publish the image that rected.
+   *
+   */
+  void publishRect();
 
   /**
    * @brief accessor of CameraInfo.
@@ -184,10 +196,16 @@ private:
    */
   int32_t buffer_size_;
 
+  double rect_;
+  double raw_factor_;
+  int rotate_;
+  int compress_height_;
   /**
    * @brief image publisher created by image_transport::ImageTransport.
    */
   image_transport::CameraPublisher pub_;
+
+  image_transport::CameraPublisher rectpub_;
 
   /**
    * @brief capture device.
