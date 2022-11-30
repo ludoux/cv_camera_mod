@@ -1,9 +1,33 @@
-ROS OpenCV camera driver
+ROS OpenCV camera driver (Fork from https://github.com/OTL/cv_camera)
 ========================
 
 It is very easy to capture video device if we use `cv::VideoCapture` of OpenCV.
 
 If you are searching ROS2 driver, check [here](https://github.com/Kapernikov/cv_camera)
+
+## What I Modified (by [@ludoux](github.com/ludoux))
+
+### rect / cut & zoom 放大镜（裁切放大）
+
+We have a task of distinguishing the smallest notch in pictures. This feature can cut a area from the center of the original camera image and publish it to another topic named "rect", which can help the operator to identify the notch in the laptop screen easier. 
+
+`~rect` (*double*, default: 1.0) set it greater than 1.01 to activate it, and I suggest it to be 2.0 . When the original image topic is 2560x1440 and the rect is 2.0, it will cut the 1280x720 from the center of the original image and publish it to rect topic.
+
+`~raw_factor` (*double*, default: 2.0) compress the raw topic in order to save bandwidth. If the raw_factor is set to 2.0 and the original image topic is 2560x1440, it will be compressed to 1280x720. 
+
+![](README.assets/rect_demo.png)
+
+### rotate 180° 画幅旋转180度
+
+It's useful when the camera must be rotated due to some installation problems.
+
+`~rotate` (*int*, default: 0) set it to 1 to activate it.
+
+### compress 画幅压缩
+
+It seems that only few cameras can't show full frame when opened by lower resolution. This feature can help to show full frame with lower resolution in order to save bandwidth.
+
+`~compress_height` (*int*, default: 0) set it to *0 < compress_height < original height* to activate it. For example, 480 or 360 as you want.
 
 cv_camera_node
 ------------------

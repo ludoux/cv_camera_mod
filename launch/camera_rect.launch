@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<launch>
+
+
+<node name="camera_0" pkg="cv_camera" type="cv_camera_node" respawn="true" respawn_delay="2" output="screen">
+<param name="device_path" value="/dev/video0"/>
+<param name="image_width" value="2560"/>
+<param name="image_height" value="1440"/>
+<param name="rect" value="2.0"/>
+<param name="raw_factor" value="2.0"/>
+</node>
+
+
+</launch>
